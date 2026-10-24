@@ -1,6 +1,6 @@
 ---
 name: gerbang-aman
-description: Audit keamanan dan penetration test pra-deploy untuk aplikasi web, selaras OWASP Top 10:2025 dan OWASP ASVS v5. Gunakan saat user meminta security audit, pentest, vulnerability assessment, code security review, "audit keamanan", "pentest", "cek OWASP", "review celah keamanan", atau mengecek aplikasi sebelum deploy / sebelum production. Mencakup PHP (native, Laravel, CodeIgniter), Node.js (Express), dan pemeriksaan generik untuk stack lain — SAST berdasarkan kategori OWASP, pemindaian dependensi & supply chain, audit konfigurasi, DAST otomatis (Nuclei, Nikto, OWASP ZAP, sqlmap), dan tes manual otorisasi/logika (IDOR, eskalasi privilege, SSRF, file upload, sesi/JWT), diakhiri laporan audit Bahasa Indonesia dan putusan deploy GO / NO-GO.
+description: Audit keamanan dan penetration test pra-deploy untuk aplikasi web, selaras OWASP Top 10:2025 dan OWASP ASVS v5. Gunakan saat user meminta security audit, pentest, vulnerability assessment, code security review, "audit keamanan", "pentest", "cek OWASP", "review celah keamanan", atau mengecek aplikasi sebelum deploy / sebelum production. Mencakup PHP (native, Laravel, CodeIgniter), Node.js (Express), dan pemeriksaan generik untuk stack lain — SAST berdasarkan kategori OWASP, pemindaian dependensi & supply chain, audit konfigurasi, DAST otomatis (Nuclei, Nikto, OWASP ZAP, sqlmap), dan tes manual otorisasi/logika (IDOR, eskalasi privilege, SSRF, file upload, sesi/JWT), diakhiri laporan audit Bahasa Indonesia, findings.json machine-readable, dan putusan deploy GO / NO-GO.
 ---
 
 # Audit Keamanan & Pentest Pra-Deploy (Aplikasi Web)
@@ -17,6 +17,31 @@ Penilaian keamanan lengkap sebelum aplikasi web naik production: SAST (audit kod
 4. **Backup sebelum pengujian** (database + file). Catat lokasi backup di laporan.
 5. **Bersih-bersih setelah selesai**: hapus semua file tes yang diunggah, semua akun tes yang dibuat, semua artefak payload — dan daftarkan pembersihannya di laporan.
 6. **Berhenti dan lapor segera saat menemukan temuan Critical**, sebelum melanjutkan.
+
+> **Versi 1.1** — menambahkan disiplin status temuan & kalibrasi severity, `findings.json` machine-readable, dan daftar anti-pattern, diadaptasi dari praktik terbaik skill audit keamanan open-source (termasuk security-audit dari Cloudflare). Kerangka OWASP/ASVS dan seluruh fase tidak berubah.
+
+## Disiplin temuan — status, bukti, dan severity
+
+Temuan bukanlah "best practice yang belum diterapkan". Temuan adalah **batas kepercayaan (trust boundary) yang nyata dilanggar dengan hasil konkret**. Tanpa pelanggaran boundary yang bisa ditunjukkan, sesuatu bukan temuan terkonfirmasi — seberapa pun tidak enaknya kelihatannya.
+
+Setiap kandidat temuan wajib berstatus tepat satu:
+
+- **`confirmed`** — terbukti: ada bukti yang bisa diverifikasi ulang (PoC request/response, lokasi kode + jalur eksploitasinya, atau hasil scanner yang sudah diverifikasi manual). **Hanya status ini yang boleh memiliki severity** dan hanya status ini yang memengaruhi putusan GO / NO-GO.
+- **`needs_validation`** — hipotesis kuat yang berakar pada kode/konfigurasi, tetapi fakta penentunya berada di luar jangkauan pemeriksaan (perilaku reverse proxy/CDN, setting panel/hosting, kondisi production yang tidak boleh diuji intrusif). Wajib mencantumkan: fakta yang kurang + rencana validasi yang aman oleh pemilik aplikasi. **Tanpa severity** — jangan menakuti dengan label yang belum terbukti.
+- **`rejected`** — sudah diperiksa dan ternyata bukan celah (kontrolnya ada di lapisan lain, dampak hanya ke akun sendiri, atau memang perilaku yang dimaksudkan). Catat alasannya agar tidak dilaporkan ulang pada audit berikutnya.
+
+**Syarat `confirmed` (uji boundary)** — sebutkan keenamnya: (1) aktor/principal dengan trust lebih rendah, (2) input atau aksi yang diterima sistem, (3) kontrol yang seharusnya menahan, (4) boundary yang diterobos, (5) resource/pihak yang terdampak, (6) hasil konkret yang teramati. Kurang satu → turunkan ke `needs_validation`.
+
+**Kalibrasi severity** (jangkar untuk aplikasi web — severity tidak boleh melebihi dampak yang didemonstrasikan):
+- **Critical** — aktor tanpa login memperoleh eksekusi kode (RCE), dump database, ambil alih akun siapa pun, atau bypass autentikasi total.
+- **High** — kontrol keamanan eksplisit runtuh dengan konsekuensi nyata: IDOR baca/tulis data pengguna lain, eskalasi ke admin, stored XSS yang mengenai pengguna lain, SQL injection terkonfirmasi.
+- **Medium** — pelanggaran nyata dengan radius terbatas: IDOR satu record non-sensitif, CSRF pada aksi berdampak rendah, rate limit hilang di endpoint non-kritis.
+- **Low** — kebocoran informasi non-rahasia (versi software, path internal), atau dampak yang butuh usaha besar untuk hasil kecil.
+- **Informational** — terkonfirmasi tetapi dampak minimal; berguna sebagai catatan atau bahan rantai temuan lain.
+
+Pembeda High vs Medium: apakah hasil yang didemonstrasikan **sepenuhnya menumbangkan** kontrol untuk aksi berkonsekuensi nyata, atau hanya **melemahkannya**? Jika dampak konkretnya tidak bisa disebutkan, severity-nya lebih rendah dari yang terasa.
+
+**Perbaikan terkecil**: untuk setiap `confirmed`, rekomendasikan perubahan sumber terkecil yang menegakkan invariant pada titik keputusan terakhir yang tepercaya (contoh diff ada di template Fase 6) — bukan nasihat hardening umum.
 
 ## Fase 0 — Ruang lingkup & level ASVS
 
@@ -151,7 +176,7 @@ Area yang butuh login: sertakan sesi yang sudah login (`nuclei -header "Cookie: 
 
 Scanner tidak bisa menemukan celah logika. Jalankan setiap tes; catat bukti request/response:
 
-1. **IDOR / horizontal** — sebagai User A, buka URL record milik A; ganti ID-nya (angka, UUID, atau nomor pegawai/NIP) ke milik User B. Data B yang terlihat/teredit/terhapus apa pun = **Critical**.
+1. **IDOR / horizontal** — sebagai User A, buka URL record milik A; ganti ID-nya (angka, UUID, atau nomor pegawai/NIP) ke milik User B. Data B yang terlihat/teredit/terhapus apa pun = temuan `confirmed`; severity mengikuti kalibrasi di bagian Disiplin Temuan (umumnya **High**; **Critical** bila tanpa login, massal, atau bisa tulis/hapus).
 2. **Eskalasi vertikal** — sebagai role terendah, minta langsung URL admin (manajemen user, hapus, ekspor). Wajib ditolak di server-side.
 3. **Manipulasi parameter privilege** — tambah/ubah field `role`, `is_admin`, `status`, harga/jumlah pada request; server wajib mengabaikan atau menolak (cek mass assignment, A01/A06).
 4. **Uji throttling** — rate limit wajib bertahan terhadap rotasi `X-Forwarded-For` dan manipulasi header; termasuk endpoint OTP/reset. (Staging saja.)
@@ -177,7 +202,8 @@ Tulis laporan dalam format ini (Bahasa Indonesia):
 - **Target ASVS Level**: [1 / 2 / 3]
 - **Tools**: [versi nuclei/sqlmap/zap]
 - **Backup sebelum tes**: [lokasi]
-- **Total Temuan**: [X] ([n] Critical, [n] High, [n] Medium, [n] Low)
+- **Total Temuan (confirmed)**: [X] ([n] Critical, [n] High, [n] Medium, [n] Low)
+- **Perlu Validasi (needs_validation, tanpa severity)**: [n]
 - **Putusan Deploy**: GO / NO-GO — [alasan satu baris]
 
 ## Temuan Detail
@@ -189,6 +215,12 @@ Tulis laporan dalam format ini (Bahasa Indonesia):
 - **Skenario Eksploitasi (PoC)**: langkah penyerang, bukti request/response
 - **Perbaikan**:
   (diff: - kode rentan / + kode aman)
+
+## Perlu Validasi (needs_validation — tanpa severity)
+### Judul Hipotesis
+- **Hipotesis**: boundary yang diduga dilanggar dan mengapa
+- **Fakta yang kurang**: fakta penentu yang belum bisa diperiksa
+- **Rencana validasi aman**: cara pemilik aplikasi membuktikannya tanpa risiko
 
 ## Pembersihan (Cleanup)
 - File/akun/payload tes yang dibuat & sudah dihapus: [daftar]
@@ -202,10 +234,58 @@ Tulis laporan dalam format ini (Bahasa Indonesia):
 3. Low — perbaikan oportunistik
 ```
 
+**`findings.json` (wajib, machine-readable)** — selain laporan Markdown, tulis file `findings.json` berisi seluruh temuan (`confirmed`, `needs_validation`, `rejected`) agar hasil audit bisa dilacak, dibandingkan antar-rilis, dan diproses alat lain:
+
+```json
+{
+  "target": "nama-aplikasi",
+  "date": "2026-01-31",
+  "asvs_level": 2,
+  "verdict": "NO-GO",
+  "findings": [
+    {
+      "id": "GA-001",
+      "title": "IDOR pada endpoint data pegawai",
+      "status": "confirmed",
+      "severity": "High",
+      "owasp": "A01:2025",
+      "asvs": "V4",
+      "location": "app/detail.php:L45",
+      "evidence": "User A membuka /detail.php?nip=<milik B> → data B tampil penuh",
+      "impact": "Kebocoran data pribadi antarpegawai",
+      "fix": "Tambahkan cek kepemilikan record terhadap sesi login sebelum menampilkan",
+      "retest": "pending"
+    },
+    {
+      "id": "GA-002",
+      "title": "Dugaan header keamanan ditelan reverse proxy",
+      "status": "needs_validation",
+      "severity": null,
+      "missing_fact": "Konfigurasi proxy di depan aplikasi tidak tersedia di repo",
+      "validation_plan": "Pemilik memeriksa respons dari origin langsung vs via proxy"
+    }
+  ]
+}
+```
+
+Aturan: field `severity` hanya terisi untuk `confirmed` (selain itu `null`); setiap `confirmed` wajib punya `evidence`; setiap `needs_validation` wajib punya `missing_fact` + `validation_plan`; `rejected` wajib punya alasan di `evidence`/catatan. Angka di Ringkasan Eksekutif wajib sama dengan isi `findings.json` dan daftar Temuan Detail — jika berbeda, laporan belum selesai.
+
 **Aturan putusan:**
 - Ada **Critical atau High** yang masih terbuka → **NO-GO**. Perbaiki, jalankan ulang fase terkait, tes ulang.
 - Medium → perbaiki bila murah, selain itu dokumentasikan penerimaan risikonya oleh pemilik aplikasi.
+- `needs_validation` tidak otomatis memblokir GO, tetapi wajib tercantum di laporan dan diterima risikonya secara eksplisit oleh pemilik aplikasi — **kecuali** hipotesisnya berdampak setara Critical (mis. dugaan SQL injection di production yang tidak boleh diuji intrusif): itu **NO-GO** sampai tervalidasi di staging.
 - Jangan pernah mengklaim "100% aman" — klaim yang benar adalah "tidak ada temuan Critical/High setelah checklist ini, ASVS Level [n]".
+
+## Anti-pattern — jangan lakukan ini
+
+1. Melaporkan deviasi checklist / best practice yang belum diterapkan sebagai kerentanan, tanpa pelanggaran boundary yang terbukti.
+2. Memberi severity pada temuan yang belum tervalidasi (`needs_validation` tidak punya severity).
+3. Menebak perilaku deployment (proxy, CDN, panel hosting, provider) yang tidak ada di kode/konfigurasi yang diperiksa — jadikan `needs_validation`, bukan kesimpulan.
+4. Menganggap dampak ke diri sendiri (self-XSS, membaca data sendiri) sebagai temuan lintas-pengguna.
+5. Mengklaim dampak lebih kuat dari yang teramati (crash parser ≠ RCE; input terefleksi ≠ stored XSS).
+6. Melaporkan ulang temuan lama yang sudah diperbaiki tanpa re-test pada kode terkini.
+7. Laporan prosa saja tanpa bukti yang bisa diverifikasi ulang (lokasi kode, request/response, versi tool).
+8. Mengubah kode target selama audit — audit mendeskripsikan perbaikan; perubahan kode adalah pekerjaan terpisah atas persetujuan pemilik aplikasi.
 
 ## Referensi cepat — pemeriksaan bernilai tertinggi
 
