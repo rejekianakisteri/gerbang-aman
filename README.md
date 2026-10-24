@@ -1,5 +1,12 @@
 # 🚪 Gerbang Aman
 
+<p align="center">
+  <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
+  <img src="https://img.shields.io/badge/OWASP-Top%2010%3A2025-red.svg" alt="OWASP Top 10:2025">
+  <img src="https://img.shields.io/badge/ASVS-v5-blue.svg" alt="OWASP ASVS v5">
+  <img src="https://img.shields.io/badge/Works_with-OpenCode%20%7C%20Antigravity-blueviolet.svg" alt="Works with OpenCode and Antigravity">
+</p>
+
 **Skill audit keamanan & penetration test pra-deploy untuk aplikasi web** — selaras **OWASP Top 10:2025** dan **OWASP ASVS v5.0.0**. Sebuah aplikasi tidak boleh lewat ke production sebelum melewati gerbang ini.
 
 > **English summary:** A pre-deployment security audit & pentest Agent Skill for web apps, aligned with OWASP Top 10:2025 and ASVS v5. Covers SAST, supply-chain & dependency scanning, configuration audit, automated DAST (Nuclei, Nikto, OWASP ZAP, sqlmap), and manual authorization/logic testing — ending with a GO / NO-GO deployment verdict. Instructions are in Bahasa Indonesia.
@@ -21,12 +28,23 @@ Alur audit 6 fase + 1 gerbang putusan:
 
 Stack yang dicakup mendalam: **PHP** (native, Laravel, CodeIgniter) dan **Node.js** (Express). Stack lain dicakup lewat perintah audit resmi masing-masing ekosistem + fase-fase generiknya.
 
+## Contoh Keluaran
+
+Setiap temuan dilaporkan dengan bukti dan contoh perbaikannya:
+
+> ### [HIGH] IDOR — Data Pengguna Lain Terbuka
+> - **Lokasi:** `GET /api/peserta/{id}`
+> - **Bukti:** login sebagai user A, ubah `{id}` ke milik user B → data B tampil penuh
+> - **Dampak:** kebocoran data pribadi lintas akun
+> - **Perbaikan:** validasi kepemilikan data di server sebelum data dikembalikan
+> - **Status:** ❌ Belum diperbaiki — **menahan GO**
+
 ## Instalasi
 
 ### Cara cepat (skills CLI)
 
 ```bash
-npx skills add <username-github>/gerbang-aman
+npx skills add rejekianakisteri/gerbang-aman
 ```
 
 ### Cara manual
