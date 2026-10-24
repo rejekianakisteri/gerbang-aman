@@ -79,6 +79,8 @@ Skill ini dibuat untuk menguji **aplikasi milik sendiri atau yang berizin tertul
 
 Gerbang Aman adalah karya kolaborasi dua proses pembuatan yang sama-sama dibantu AI agent: panduan audit berbasis standar **OWASP Top 10:2025** dan **OWASP ASVS v5.0.0** (ditulis dari referensi dokumentasi standar keamanan internasional yang dipublikasikan OWASP) yang digabungkan dengan workflow pentest pra-deploy berbasis eksekusi tools, lalu diselaraskan untuk stack PHP & Node.js. Nama dan kerangka standar OWASP dirujuk sebagaimana mestinya; materi OWASP sendiri diterbitkan di bawah lisensi CC BY-SA.
 
+Versi 1.1 menyerap sejumlah praktik dari security-audit skill milik Cloudflare (https://github.com/cloudflare/security-audit-skill, lisensi MIT) — khususnya disiplin status temuan, kalibrasi severity, dan temuan machine-readable — yang diadaptasi dan ditulis ulang untuk konteks audit pra-deploy aplikasi web.
+
 ## Lisensi
 
 MIT — lihat file [LICENSE](LICENSE).
