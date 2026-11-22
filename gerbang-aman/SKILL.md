@@ -1,6 +1,6 @@
 ---
 name: gerbang-aman
-description: Audit keamanan dan penetration test pra-deploy untuk aplikasi web, selaras OWASP Top 10:2025 dan OWASP ASVS v5. Gunakan saat user meminta security audit, pentest, vulnerability assessment, code security review, "audit keamanan", "pentest", "cek OWASP", "review celah keamanan", atau mengecek aplikasi sebelum deploy / sebelum production. Mencakup PHP (native, Laravel, CodeIgniter), Node.js (Express), dan pemeriksaan generik untuk stack lain — SAST berdasarkan kategori OWASP, pemindaian dependensi & supply chain, audit konfigurasi, DAST otomatis (Nuclei, Nikto, OWASP ZAP, sqlmap), dan tes manual otorisasi/logika (IDOR, eskalasi privilege, SSRF, file upload, sesi/JWT), diakhiri laporan audit Bahasa Indonesia, findings.json machine-readable, dan putusan deploy GO / NO-GO.
+description: Audit keamanan dan penetration test pra-deploy untuk aplikasi web, selaras OWASP Top 10:2025 dan OWASP ASVS v5. Gunakan saat user meminta security audit, pentest, vulnerability assessment, code security review, "audit keamanan", "pentest", "cek OWASP", "review celah keamanan", atau mengecek aplikasi sebelum deploy / sebelum production. Mencakup PHP (native, Laravel, CodeIgniter), Node.js (Express), dan pemeriksaan generik untuk stack lain — SAST otomatis (Semgrep) plus review manual berdasarkan kategori OWASP, pemindaian dependensi & supply chain (Trivy) dan secret termasuk riwayat git (TruffleHog), audit konfigurasi, DAST otomatis (Nuclei, Nikto, OWASP ZAP, sqlmap), dan tes manual otorisasi/logika (IDOR, eskalasi privilege, SSRF, file upload, sesi/JWT), diakhiri laporan audit Bahasa Indonesia, findings.json machine-readable, dan putusan deploy GO / NO-GO.
 ---
 
 # Audit Keamanan & Pentest Pra-Deploy (Aplikasi Web)
@@ -18,6 +18,7 @@ Penilaian keamanan lengkap sebelum aplikasi web naik production: SAST (audit kod
 5. **Bersih-bersih setelah selesai**: hapus semua file tes yang diunggah, semua akun tes yang dibuat, semua artefak payload — dan daftarkan pembersihannya di laporan.
 6. **Berhenti dan lapor segera saat menemukan temuan Critical**, sebelum melanjutkan.
 
+> **Versi 1.2** — menambahkan Semgrep sebagai mesin SAST otomatis di Fase 2 (hasilnya kandidat temuan, tetap wajib verifikasi manual), serta TruffleHog (scan secret di seluruh riwayat git + verifikasi secret yang masih hidup) dan Trivy (sapu CVE dependensi + secret + miskonfigurasi dalam satu jalan) di Fase 1.
 > **Versi 1.1** — menambahkan disiplin status temuan & kalibrasi severity, `findings.json` machine-readable, dan daftar anti-pattern, diadaptasi dari praktik terbaik skill audit keamanan open-source (termasuk security-audit dari Cloudflare). Kerangka OWASP/ASVS dan seluruh fase tidak berubah.
 
 ## Disiplin temuan — status, bukti, dan severity
@@ -65,13 +66,31 @@ Pilih level verifikasi ASVS berdasarkan risiko:
 2. **Audit dependensi** — temuan High/Critical adalah penghambat rilis:
    - PHP: `composer audit` — Node: `npm audit` / `pnpm audit` / `yarn npm audit` — Python: `pip-audit` — Ruby: `bundle audit check --update` — Go: `govulncheck ./...` — Java: OWASP Dependency-Check — .NET: `dotnet list package --vulnerable` — Rust: `cargo audit`.
    - Lockfile (`composer.lock`, `package-lock.json`, `poetry.lock`) ter-commit, hash integritas terverifikasi, tidak ada paket unpinned/abandoned/typosquatting.
+   - **Sapu satu alat (Trivy)** — nutup celah antar-tool per-bahasa di atas: CVE dependensi dari lockfile, secret tertanam, dan miskonfigurasi (Dockerfile/IaC) dalam satu jalan:
+     ```bash
+     trivy fs --scanners vuln,secret,config --severity HIGH,CRITICAL <path-proyek>
+     ```
+     Hasil Trivy adalah kandidat temuan — yang `confirmed` hanya yang sudah diverifikasi manual sesuai Disiplin Temuan.
 3. **Secret**: periksa `.env`, `config/`, dan source dari password DB, JWT secret, token bot, API key yang tertanam hardcode. `.gitignore` wajib mengecualikan `.env`, `*.pem`, `*.key`, `*.sql`, `*.bak`, `storage/`, `vendor/`, `node_modules/`. Cek: `git ls-files | grep -E "^\.env$|\.sql$|\.bak$|\.pem$|phpinfo"` tidak boleh mengembalikan apa pun yang layak kirim.
+   - **Scan secret otomatis (TruffleHog)** — cek manual di atas hanya melihat tree saat ini; TruffleHog memindai **seluruh riwayat git** untuk 800+ jenis secret dan bisa memverifikasi mana yang masih hidup:
+     ```bash
+     trufflehog git file://<path-repo> --only-verified
+     ```
+     Secret terverifikasi hidup yang pernah ter-commit = temuan (severity mengikuti dampak kuncinya) dan **wajib dirotasi** — menghapus commit/file saja tidak cukup karena riwayat tetap bisa dibaca siapa pun yang punya akses repo. Tanpa `--only-verified`, hasil scan adalah kandidat: verifikasi manual dulu sebelum diberi status.
 4. **Debug mati**: `APP_DEBUG=false` / `APP_ENV=production` (PHP), `NODE_ENV=production` (Node) — stack trace tidak boleh sampai ke klien.
 5. **Isolasi filesystem**: document root menunjuk ke `public/` / `dist/`, tidak pernah ke root proyek. Aturan web menolak akses langsung ke `.env`, `.git/`, `storage/`, `includes/`, `vendor/`, `node_modules/`, folder log, dan file backup (`*.sql`, `*.zip`, `*.tar.gz`, `*.rar`, `*.xlsx`, `*.bak`, `*.log`).
 
 ## Fase 2 — SAST: checklist OWASP Top 10:2025
 
 Review kode terhadap setiap kategori. Blok grep siap-jalan setelah daftar ini adalah titik awal; review setiap hasil temuan secara manual.
+
+**SAST otomatis dulu (Semgrep), baru review manual.** Jalankan sebelum membaca checklist:
+
+```bash
+semgrep --config p/security-audit --config p/php --config p/owasp-top-ten --json -o semgrep-report.json <path>
+```
+
+(Stack Node: ganti `p/php` dengan `p/javascript` atau `p/typescript`.) Hasil Semgrep adalah **kandidat temuan**, bukan temuan: saring setiap hasil dengan checklist kategori di bawah + uji boundary di bagian Disiplin Temuan — false positive dibuang ke status `rejected`, yang lolos verifikasi manual baru boleh `confirmed`. Checklist manual tetap wajib dijalankan penuh: Semgrep tidak menilai logika bisnis, otorisasi antar-role, dan konteks alur aplikasi.
 
 **A01 Broken Access Control (termasuk IDOR & SSRF)**
 - IDOR: ID dari user dipakai query tanpa verifikasi pemilik/penyewa (`SELECT ... WHERE id = ?` tanpa mengecek record itu milik user yang login).
@@ -200,7 +219,7 @@ Tulis laporan dalam format ini (Bahasa Indonesia):
 - **Target Aplikasi**: [nama]
 - **Stack & Versi Runtime**: [PHP/Node + versi, framework, web server]
 - **Target ASVS Level**: [1 / 2 / 3]
-- **Tools**: [versi nuclei/sqlmap/zap]
+- **Tools**: [versi semgrep/trivy/trufflehog/nuclei/sqlmap/zap yang dipakai]
 - **Backup sebelum tes**: [lokasi]
 - **Total Temuan (confirmed)**: [X] ([n] Critical, [n] High, [n] Medium, [n] Low)
 - **Perlu Validasi (needs_validation, tanpa severity)**: [n]
